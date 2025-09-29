@@ -92,6 +92,10 @@
         button:hover {
             background: #1976D2;
         }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
         .results {
             margin-top: 30px;
             padding: 20px;
@@ -120,6 +124,11 @@
             justify-content: center;
             font-size: 9px;
             font-weight: bold;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 20px;
         }
     </style>
 </head>
@@ -150,7 +159,7 @@
             <p style="font-size: 14px; color: #666;">Kliknij i przeciągnij aby zaznaczyć terminy</p>
         </div>
 
-        <button onclick="submitAvailability()">Dodaj dostępność</button>
+        <button id="submitBtn" onclick="submitAvailability()">Dodaj dostępność</button>
         <button onclick="clearForm()" style="background: #757575;">Wyczyść</button>
 
         <div class="results" id="results" style="display:none;">
@@ -222,7 +231,17 @@
             isMouseDown = false;
         });
 
-        function submitAvailability() {
+        async function loadParticipants() {
+            try {
+                const response = await fetch('/api/participants');
+                participants = await response.json();
+                updateResults();
+            } catch (error) {
+                console.error('Błąd ładowania:', error);
+            }
+        }
+
+        async function submitAvailability() {
             const name = document.getElementById('name').value.trim();
             if (!name) {
                 alert('Podaj imię i nazwisko');
@@ -240,16 +259,27 @@
                 return;
             }
 
-            // Nadpisz jeśli osoba już istnieje
-            const existingIndex = participants.findIndex(p => p.name === name);
-            if (existingIndex !== -1) {
-                participants[existingIndex] = { name, slots: selected };
-            } else {
-                participants.push({ name, slots: selected });
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.textContent = 'Zapisywanie...';
+
+            try {
+                const response = await fetch('/api/participants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, slots: selected })
+                });
+                
+                participants = await response.json();
+                updateResults();
+                clearForm();
+            } catch (error) {
+                console.error('Błąd zapisu:', error);
+                alert('Błąd podczas zapisywania');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Dodaj dostępność';
             }
-            
-            updateResults();
-            clearForm();
         }
 
         function clearForm() {
@@ -267,13 +297,11 @@
 
             document.getElementById('results').style.display = 'block';
 
-            // Lista uczestników z ciągłymi przedziałami
             const list = document.getElementById('participantsList');
             list.innerHTML = participants.map(p => 
                 `<div class="person-entry"><strong>${p.name}:</strong> ${formatSlotsCompact(p.slots)}</div>`
             ).join('');
 
-            // Dostępność dla każdego slotu
             const availability = {};
             days.forEach((_, d) => {
                 times.forEach((_, t) => {
@@ -284,7 +312,6 @@
                 });
             });
 
-            // Heatmapa
             const heatmap = document.getElementById('heatmap');
             heatmap.innerHTML = '';
             
@@ -314,7 +341,6 @@
                 heatmap.appendChild(row);
             });
 
-            // Najlepsze terminy
             const sorted = Object.entries(availability)
                 .sort((a, b) => b[1] - a[1])
                 .filter(([key, count]) => count > 0)
@@ -329,7 +355,6 @@
             }).join('');
         }
 
-        // Grupuj ciągłe przedziały czasowe
         function formatSlotsCompact(slots) {
             const grouped = {};
             
@@ -374,6 +399,7 @@
         }
 
         initGrid();
+        loadParticipants();
     </script>
 </body>
 </html>
