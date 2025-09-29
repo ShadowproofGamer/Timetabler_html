@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dostępność czasowa</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .form-section {
+            margin: 20px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .schedule-grid {
+            margin: 20px 0;
+        }
+        .day-row {
+            display: grid;
+            grid-template-columns: 80px repeat(9, 1fr);
+            gap: 3px;
+            margin-bottom: 3px;
+            align-items: center;
+        }
+        .day-label {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .time-slot {
+            aspect-ratio: 1;
+            background: #e0e0e0;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            user-select: none;
+        }
+        .time-slot:hover {
+            opacity: 0.8;
+        }
+        .time-slot.selected {
+            background: #4CAF50;
+            color: white;
+        }
+        .time-header {
+            display: grid;
+            grid-template-columns: 80px repeat(9, 1fr);
+            gap: 3px;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        .results {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        .person-entry {
+            background: white;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+        }
+        .best-time {
+            background: #E8F5E9;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        .heatmap-slot {
+            aspect-ratio: 1;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ustal wspólny termin spotkania</h1>
+        
+        <div class="form-section">
+            <label for="name">Imię i nazwisko:</label>
+            <input type="text" id="name" placeholder="Wpisz swoje imię i nazwisko">
+        </div>
+
+        <div class="form-section">
+            <label>Zaznacz terminy, w których jesteś dostępny/a:</label>
+            <div class="time-header">
+                <div></div>
+                <div>18:00</div>
+                <div>18:30</div>
+                <div>19:00</div>
+                <div>19:30</div>
+                <div>20:00</div>
+                <div>20:30</div>
+                <div>21:00</div>
+                <div>21:30</div>
+                <div>22:00</div>
+            </div>
+            <div class="schedule-grid" id="scheduleGrid"></div>
+            <p style="font-size: 14px; color: #666;">Kliknij i przeciągnij aby zaznaczyć terminy</p>
+        </div>
+
+        <button onclick="submitAvailability()">Dodaj dostępność</button>
+        <button onclick="clearForm()" style="background: #757575;">Wyczyść</button>
+
+        <div class="results" id="results" style="display:none;">
+            <h2>Dostępność uczestników:</h2>
+            <div id="participantsList"></div>
+            
+            <h3 style="margin-top: 30px;">Najlepsze terminy spotkania:</h3>
+            <div class="time-header">
+                <div></div>
+                <div>18:00</div>
+                <div>18:30</div>
+                <div>19:00</div>
+                <div>19:30</div>
+                <div>20:00</div>
+                <div>20:30</div>
+                <div>21:00</div>
+                <div>21:30</div>
+                <div>22:00</div>
+            </div>
+            <div class="schedule-grid" id="heatmap"></div>
+            <div id="bestTimes"></div>
+        </div>
+    </div>
+
+    <script>
+        let isMouseDown = false;
+        let participants = [];
+        const days = ['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek'];
+        const daysShort = ['pon', 'wt', 'śr', 'czw', 'pt'];
+        const times = ['18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00'];
+
+        function initGrid() {
+            const grid = document.getElementById('scheduleGrid');
+            
+            days.forEach((day, dayIdx) => {
+                const row = document.createElement('div');
+                row.className = 'day-row';
+                
+                const label = document.createElement('div');
+                label.className = 'day-label';
+                label.textContent = day;
+                row.appendChild(label);
+                
+                times.forEach((time, timeIdx) => {
+                    const slot = document.createElement('div');
+                    slot.className = 'time-slot';
+                    slot.dataset.day = dayIdx;
+                    slot.dataset.time = timeIdx;
+                    
+                    slot.addEventListener('mousedown', () => {
+                        isMouseDown = true;
+                        slot.classList.toggle('selected');
+                    });
+                    
+                    slot.addEventListener('mouseenter', () => {
+                        if (isMouseDown) {
+                            slot.classList.add('selected');
+                        }
+                    });
+                    
+                    row.appendChild(slot);
+                });
+                
+                grid.appendChild(row);
+            });
+        }
+
+        document.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+
+        function submitAvailability() {
+            const name = document.getElementById('name').value.trim();
+            if (!name) {
+                alert('Podaj imię i nazwisko');
+                return;
+            }
+
+            const selected = Array.from(document.querySelectorAll('.time-slot.selected'))
+                .map(slot => ({
+                    day: parseInt(slot.dataset.day),
+                    time: parseInt(slot.dataset.time)
+                }));
+            
+            if (selected.length === 0) {
+                alert('Zaznacz przynajmniej jeden termin');
+                return;
+            }
+
+            participants.push({ name, slots: selected });
+            updateResults();
+            clearForm();
+        }
+
+        function clearForm() {
+            document.getElementById('name').value = '';
+            document.querySelectorAll('.time-slot.selected').forEach(slot => {
+                slot.classList.remove('selected');
+            });
+        }
+
+        function updateResults() {
+            if (participants.length === 0) {
+                document.getElementById('results').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('results').style.display = 'block';
+
+            // Lista uczestników z ciągłymi przedziałami
+            const list = document.getElementById('participantsList');
+            list.innerHTML = participants.map(p => 
+                `<div class="person-entry"><strong>${p.name}:</strong> ${formatSlotsCompact(p.slots)}</div>`
+            ).join('');
+
+            // Dostępność dla każdego slotu
+            const availability = {};
+            days.forEach((_, d) => {
+                times.forEach((_, t) => {
+                    const key = `${d}-${t}`;
+                    availability[key] = participants.filter(p => 
+                        p.slots.some(s => s.day === d && s.time === t)
+                    ).length;
+                });
+            });
+
+            // Heatmapa
+            const heatmap = document.getElementById('heatmap');
+            heatmap.innerHTML = '';
+            
+            const maxCount = Math.max(...Object.values(availability));
+            
+            days.forEach((day, dayIdx) => {
+                const row = document.createElement('div');
+                row.className = 'day-row';
+                
+                const label = document.createElement('div');
+                label.className = 'day-label';
+                label.textContent = day;
+                row.appendChild(label);
+                
+                times.forEach((time, timeIdx) => {
+                    const key = `${dayIdx}-${timeIdx}`;
+                    const count = availability[key];
+                    const intensity = maxCount > 0 ? count / maxCount : 0;
+                    
+                    const slot = document.createElement('div');
+                    slot.className = 'heatmap-slot';
+                    slot.style.background = `rgba(76, 175, 80, ${intensity})`;
+                    slot.textContent = count;
+                    row.appendChild(slot);
+                });
+                
+                heatmap.appendChild(row);
+            });
+
+            // Najlepsze terminy
+            const sorted = Object.entries(availability)
+                .sort((a, b) => b[1] - a[1])
+                .filter(([key, count]) => count > 0)
+                .slice(0, 5);
+            
+            const bestTimes = document.getElementById('bestTimes');
+            bestTimes.innerHTML = sorted.map(([key, count]) => {
+                const [d, t] = key.split('-').map(Number);
+                return `<div class="best-time">
+                    <strong>${days[d]}, ${times[t]}</strong> - dostępnych: ${count} z ${participants.length} osób
+                </div>`;
+            }).join('');
+        }
+
+        // Grupuj ciągłe przedziały czasowe
+        function formatSlotsCompact(slots) {
+            const grouped = {};
+            
+            slots.forEach(s => {
+                if (!grouped[s.day]) grouped[s.day] = [];
+                grouped[s.day].push(s.time);
+            });
+            
+            const result = [];
+            
+            Object.keys(grouped).sort((a, b) => a - b).forEach(day => {
+                const timeSlots = grouped[day].sort((a, b) => a - b);
+                const ranges = [];
+                let start = timeSlots[0];
+                let prev = timeSlots[0];
+                
+                for (let i = 1; i <= timeSlots.length; i++) {
+                    if (i === timeSlots.length || timeSlots[i] !== prev + 1) {
+                        const endTime = times[prev];
+                        const endHour = parseInt(endTime.split(':')[0]);
+                        const endMin = parseInt(endTime.split(':')[1]);
+                        let nextTime;
+                        if (endMin === 30) {
+                            nextTime = `${endHour + 1}:00`;
+                        } else {
+                            nextTime = `${endHour}:30`;
+                        }
+                        ranges.push(`${times[start]}-${nextTime}`);
+                        if (i < timeSlots.length) {
+                            start = timeSlots[i];
+                        }
+                    }
+                    if (i < timeSlots.length) {
+                        prev = timeSlots[i];
+                    }
+                }
+                
+                result.push(`${daysShort[day]} ${ranges.join(', ')}`);
+            });
+            
+            return result.join('; ');
+        }
+
+        initGrid();
+    </script>
+</body>
+</html>
