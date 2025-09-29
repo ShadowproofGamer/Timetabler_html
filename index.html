@@ -240,7 +240,14 @@
                 return;
             }
 
-            participants.push({ name, slots: selected });
+            // Nadpisz jeśli osoba już istnieje
+            const existingIndex = participants.findIndex(p => p.name === name);
+            if (existingIndex !== -1) {
+                participants[existingIndex] = { name, slots: selected };
+            } else {
+                participants.push({ name, slots: selected });
+            }
+            
             updateResults();
             clearForm();
         }
