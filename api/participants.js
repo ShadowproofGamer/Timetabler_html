@@ -1,5 +1,5 @@
 // api/participants.js
-import { kv } from '@vercel/kv';
+import { neon } from '@neondatabase/serverless';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -10,24 +10,32 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  const sql = neon(process.env.DATABASE_URL);
+
+  // Utwórz tabelę jeśli nie istnieje
+  await sql`
+    CREATE TABLE IF NOT EXISTS participants (
+      name TEXT PRIMARY KEY,
+      slots JSONB NOT NULL
+    )
+  `;
+
   if (req.method === 'GET') {
-    const participants = await kv.get('participants') || [];
+    const participants = await sql`SELECT name, slots FROM participants`;
     return res.status(200).json(participants);
   }
 
   if (req.method === 'POST') {
     const { name, slots } = req.body;
-    let participants = await kv.get('participants') || [];
     
-    const existingIndex = participants.findIndex(p => p.name === name);
+    await sql`
+      INSERT INTO participants (name, slots)
+      VALUES (${name}, ${JSON.stringify(slots)})
+      ON CONFLICT (name) 
+      DO UPDATE SET slots = ${JSON.stringify(slots)}
+    `;
     
-    if (existingIndex !== -1) {
-      participants[existingIndex] = { name, slots };
-    } else {
-      participants.push({ name, slots });
-    }
-    
-    await kv.set('participants', participants);
+    const participants = await sql`SELECT name, slots FROM participants`;
     return res.status(200).json(participants);
   }
 
